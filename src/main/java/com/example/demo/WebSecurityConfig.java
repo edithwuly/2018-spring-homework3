@@ -17,7 +17,8 @@ import org.springframework.security.oauth2.config.annotation.web.configuration.E
 import org.springframework.security.oauth2.config.annotation.web.configuration.ResourceServerConfigurerAdapter;
 import org.springframework.security.oauth2.config.annotation.web.configurers.AuthorizationServerEndpointsConfigurer;
 import org.springframework.security.oauth2.config.annotation.web.configurers.AuthorizationServerSecurityConfigurer;
-import org.springframework.security.oauth2.config.annotation.web.configurers.ResourceServerSecurityConfigurer;
+import org.springframework.security.oauth2.provider.token.TokenStore;
+import org.springframework.security.oauth2.provider.token.store.InMemoryTokenStore;
 
 @Configuration
 @EnableWebSecurity 
@@ -25,16 +26,11 @@ import org.springframework.security.oauth2.config.annotation.web.configurers.Res
 public class WebSecurityConfig extends WebSecurityConfigurerAdapter { 
     @Override
     protected void configure(HttpSecurity http) throws Exception {
-        http 
-            .authorizeRequests()
-            	.antMatchers("/Wordladder/**").hasRole("USER")
-                .anyRequest().authenticated()
+    	http.csrf().disable();
+        http.requestMatchers().antMatchers("/oauth/**")
                 .and()
-            .logout()
-                .permitAll()
-                .and()  
-            .httpBasic().realmName("OAuth Server");
-        http.csrf().disable(); 
+                .authorizeRequests()
+                .antMatchers("/oauth/**").authenticated();
     }
    
     @Autowired
@@ -58,39 +54,50 @@ public class WebSecurityConfig extends WebSecurityConfigurerAdapter {
         @Override
         public void configure(AuthorizationServerSecurityConfigurer oauthServer) throws Exception {
             oauthServer
-                    .tokenKeyAccess("permitAll()") //url:/oauth/token_key,exposes public key for token verification if using JWT tokens
-                    .checkTokenAccess("isAuthenticated()") //url:/oauth/check_token allow check token
+                    .tokenKeyAccess("permitAll()") 
+                    .checkTokenAccess("isAuthenticated()") 
                     .allowFormAuthenticationForClients();
         }
         
         @Autowired
         private AuthenticationManager authenticationManager;
+        
+        @Autowired
+        private TokenStore tokenStore;
 
         @Override
         public void configure(AuthorizationServerEndpointsConfigurer endpoints) throws Exception {
-            endpoints.authenticationManager(authenticationManager);
+            endpoints.tokenStore(tokenStore).authenticationManager(authenticationManager);
         }
 
         @Override
         public void configure(ClientDetailsServiceConfigurer clients) throws Exception {
             clients.inMemory()
-                    .withClient("demoApp")
-                    .secret("demoAppSecret")
-                    .authorizedGrantTypes("client_credentials", "password", "refresh_token")
+                    .withClient("client")
+                    .secret("{noop}secret")
+                    .authorizedGrantTypes("password", "refresh_token")
                     .scopes("all")
                     .resourceIds("oauth2-resource")
+                    .redirectUris("/Wordladder")
                     .accessTokenValiditySeconds(1200)
                     .refreshTokenValiditySeconds(50000);
+        }
+        
+        @Bean
+        public TokenStore tokenStore() {
+            return new InMemoryTokenStore();
         }
     }
       
     @Configuration  
     @EnableResourceServer  
     public class ResourceServerConfig extends ResourceServerConfigurerAdapter {   
-        /*@Override  
+        @Override  
         public void configure(HttpSecurity http) throws Exception {  
-            http.authorizeRequests()  
-                .antMatchers(HttpMethod.GET, "/Wordladder").access("#oauth2.hasScope('read')");   
-        }  */
+        	http.requestMatchers().antMatchers("/Wordladder")
+            .and()
+            .authorizeRequests()
+            .antMatchers("/Wordladder").authenticated();   
+        } 
     }  
 }
