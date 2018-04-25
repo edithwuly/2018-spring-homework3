@@ -25,9 +25,12 @@ import org.springframework.security.oauth2.config.annotation.web.configurers.Aut
 public class WebSecurityConfig extends WebSecurityConfigurerAdapter { 
 	@Override
     protected void configure(HttpSecurity http) throws Exception {
-        http.formLogin()
-                .and().csrf().disable()
-                .authorizeRequests().anyRequest().authenticated();
+        http
+        	.formLogin().defaultSuccessUrl("/Wordladder")
+            .and().csrf().disable()
+            .authorizeRequests().anyRequest().authenticated()
+            .and()
+    		.httpBasic();
     }
 
     @Override
