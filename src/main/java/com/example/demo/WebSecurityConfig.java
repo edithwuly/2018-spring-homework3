@@ -13,24 +13,34 @@ import org.springframework.security.config.annotation.web.configuration.WebSecur
 import org.springframework.security.oauth2.config.annotation.configurers.ClientDetailsServiceConfigurer;
 import org.springframework.security.oauth2.config.annotation.web.configuration.AuthorizationServerConfigurerAdapter;
 import org.springframework.security.oauth2.config.annotation.web.configuration.EnableAuthorizationServer;
+import org.springframework.security.oauth2.config.annotation.web.configuration.EnableOAuth2Client;
 import org.springframework.security.oauth2.config.annotation.web.configuration.EnableResourceServer;
 import org.springframework.security.oauth2.config.annotation.web.configuration.ResourceServerConfigurerAdapter;
 import org.springframework.security.oauth2.config.annotation.web.configurers.AuthorizationServerEndpointsConfigurer;
 import org.springframework.security.oauth2.config.annotation.web.configurers.AuthorizationServerSecurityConfigurer;
+import org.springframework.security.oauth2.config.annotation.web.configurers.ResourceServerSecurityConfigurer;
 import org.springframework.security.oauth2.provider.token.TokenStore;
 import org.springframework.security.oauth2.provider.token.store.InMemoryTokenStore;
 
 @Configuration
 @EnableWebSecurity 
+@EnableOAuth2Client
 @EnableGlobalMethodSecurity(prePostEnabled = true)
 public class WebSecurityConfig extends WebSecurityConfigurerAdapter { 
     @Override
     protected void configure(HttpSecurity http) throws Exception {
-    	http.csrf().disable();
-        http.requestMatchers().antMatchers("/oauth/**")
-                .and()
-                .authorizeRequests()
-                .antMatchers("/oauth/**").authenticated();
+    	http.csrf().disable();  
+        http.authorizeRequests()  
+            .antMatchers("/oauth/authorize").authenticated()  
+            .and()  
+            .httpBasic().realmName("OAuth Server");  
+    	http 
+        .formLogin()
+        	.defaultSuccessUrl("/Wordladder")
+            .permitAll()
+            .and()
+        .logout()
+            .permitAll();
     }
    
     @Autowired
@@ -45,59 +55,36 @@ public class WebSecurityConfig extends WebSecurityConfigurerAdapter {
     public AuthenticationManager authenticationManagerBean() throws Exception {
         return super.authenticationManagerBean();
     }
-    
-    
+  
     @Configuration  
     @EnableAuthorizationServer  
-    public class OAuth2ServerConfig extends AuthorizationServerConfigurerAdapter {
-
-        @Override
-        public void configure(AuthorizationServerSecurityConfigurer oauthServer) throws Exception {
-            oauthServer
-                    .tokenKeyAccess("permitAll()") 
-                    .checkTokenAccess("isAuthenticated()") 
-                    .allowFormAuthenticationForClients();
-        }
-        
-        @Autowired
-        private AuthenticationManager authenticationManager;
-        
-        @Autowired
-        private TokenStore tokenStore;
-
-        @Override
-        public void configure(AuthorizationServerEndpointsConfigurer endpoints) throws Exception {
-            endpoints.tokenStore(tokenStore).authenticationManager(authenticationManager);
-        }
-
-        @Override
-        public void configure(ClientDetailsServiceConfigurer clients) throws Exception {
-            clients.inMemory()
-                    .withClient("client")
-                    .secret("{noop}secret")
-                    .authorizedGrantTypes("password", "refresh_token")
-                    .scopes("all")
-                    .resourceIds("oauth2-resource")
-                    .redirectUris("/Wordladder")
-                    .accessTokenValiditySeconds(1200)
-                    .refreshTokenValiditySeconds(50000);
-        }
-        
-        @Bean
-        public TokenStore tokenStore() {
-            return new InMemoryTokenStore();
-        }
-    }
+    static class OAuthAuthorizationConfig extends AuthorizationServerConfigurerAdapter {  
+        @Override  
+        public void configure(ClientDetailsServiceConfigurer clients) throws Exception {  
+            clients.inMemory()  
+                    .withClient("client")  
+                    .secret("{noop}secret")  
+                    .resourceIds("my_resource")  
+                    .scopes("read", "write")  
+                    .authorities("ROLE_USER")  
+                    .authorizedGrantTypes("authorization_code", "refresh_token")  
+                    .redirectUris("http://localhost:8080/Wordladder")  
+                    .accessTokenValiditySeconds(60*30) // 30min  
+                    .refreshTokenValiditySeconds(60*60*24); // 24h  
+        }  
+    }  
       
     @Configuration  
     @EnableResourceServer  
-    public class ResourceServerConfig extends ResourceServerConfigurerAdapter {   
+    static class OAuthResourceConfig extends ResourceServerConfigurerAdapter {  
+        @Override  
+        public void configure(ResourceServerSecurityConfigurer resources) throws Exception {  
+            resources.resourceId("my_resource");  
+        }  
         @Override  
         public void configure(HttpSecurity http) throws Exception {  
-        	http.requestMatchers().antMatchers("/Wordladder")
-            .and()
-            .authorizeRequests()
-            .antMatchers("/Wordladder").authenticated();   
-        } 
-    }  
+            http.authorizeRequests()  
+                .antMatchers(HttpMethod.GET, "/Wordladder").access("#oauth2.hasScope('read')");   
+        }  
+    } 
 }
