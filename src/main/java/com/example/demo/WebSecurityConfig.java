@@ -1,6 +1,7 @@
 package com.example.demo;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -8,46 +9,37 @@ import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.config.annotation.authentication.builders.AuthenticationManagerBuilder;
 import org.springframework.security.config.annotation.method.configuration.EnableGlobalMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.config.annotation.web.builders.WebSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.annotation.web.configuration.WebSecurityConfigurerAdapter;
 import org.springframework.security.oauth2.config.annotation.configurers.ClientDetailsServiceConfigurer;
 import org.springframework.security.oauth2.config.annotation.web.configuration.AuthorizationServerConfigurerAdapter;
 import org.springframework.security.oauth2.config.annotation.web.configuration.EnableAuthorizationServer;
-import org.springframework.security.oauth2.config.annotation.web.configuration.EnableOAuth2Client;
 import org.springframework.security.oauth2.config.annotation.web.configuration.EnableResourceServer;
 import org.springframework.security.oauth2.config.annotation.web.configuration.ResourceServerConfigurerAdapter;
 import org.springframework.security.oauth2.config.annotation.web.configurers.AuthorizationServerEndpointsConfigurer;
 import org.springframework.security.oauth2.config.annotation.web.configurers.AuthorizationServerSecurityConfigurer;
-import org.springframework.security.oauth2.config.annotation.web.configurers.ResourceServerSecurityConfigurer;
-import org.springframework.security.oauth2.provider.token.TokenStore;
-import org.springframework.security.oauth2.provider.token.store.InMemoryTokenStore;
 
 @Configuration
 @EnableWebSecurity 
-@EnableOAuth2Client
-@EnableGlobalMethodSecurity(prePostEnabled = true)
 public class WebSecurityConfig extends WebSecurityConfigurerAdapter { 
-    @Override
+	@Override
     protected void configure(HttpSecurity http) throws Exception {
-    	http.csrf().disable();  
-        http.authorizeRequests()  
-            .antMatchers("/oauth/authorize").authenticated()  
-            .and()  
-            .httpBasic().realmName("OAuth Server");  
-    	http 
-        .formLogin()
-        	.defaultSuccessUrl("/Wordladder")
-            .permitAll()
-            .and()
-        .logout()
-            .permitAll();
+        http.formLogin()
+                .and().csrf().disable()
+                .authorizeRequests().anyRequest().authenticated();
+    }
+
+    @Override
+    public void configure(WebSecurity web) throws Exception {
+        super.configure(web);
     }
    
     @Autowired
     public void configureGlobal(AuthenticationManagerBuilder auth) throws Exception {
         auth 
             .inMemoryAuthentication()
-                .withUser("user").password("{noop}123456").roles("USER");
+                .withUser("user").password("{noop}123456").authorities("ROLE_USER");
     }
     
     @Override
@@ -56,35 +48,43 @@ public class WebSecurityConfig extends WebSecurityConfigurerAdapter {
         return super.authenticationManagerBean();
     }
   
-    @Configuration  
-    @EnableAuthorizationServer  
-    static class OAuthAuthorizationConfig extends AuthorizationServerConfigurerAdapter {  
-        @Override  
-        public void configure(ClientDetailsServiceConfigurer clients) throws Exception {  
-            clients.inMemory()  
-                    .withClient("client")  
-                    .secret("{noop}secret")  
-                    .resourceIds("my_resource")  
-                    .scopes("read", "write")  
-                    .authorities("ROLE_USER")  
-                    .authorizedGrantTypes("authorization_code", "refresh_token")  
-                    .redirectUris("http://localhost:8080/Wordladder")  
-                    .accessTokenValiditySeconds(60*30) // 30min  
-                    .refreshTokenValiditySeconds(60*60*24); // 24h  
-        }  
-    }  
+    @EnableAuthorizationServer
+    @Configuration
+    public class AuthorizationServerConfiguration  extends AuthorizationServerConfigurerAdapter {
+
+        @Override
+        public void configure(ClientDetailsServiceConfigurer clients) throws Exception {
+            clients.inMemory().withClient("client")
+                    .scopes("read","write")
+                    .secret("{noop}secret")
+                    .authorizedGrantTypes("authorization_code","password","implicit","client_credentials");}
+
+        @Override
+        public void configure(AuthorizationServerSecurityConfigurer security) throws Exception {
+            super.configure(security);
+        }
+
+        @Override
+        public void configure(AuthorizationServerEndpointsConfigurer endpoints) throws Exception {
+           endpoints.authenticationManager(authenticationManager);
+        }
+
+        @Autowired
+        @Qualifier("authenticationManagerBean")
+        private AuthenticationManager authenticationManager;
+    }
       
-    @Configuration  
-    @EnableResourceServer  
-    static class OAuthResourceConfig extends ResourceServerConfigurerAdapter {  
-        @Override  
-        public void configure(ResourceServerSecurityConfigurer resources) throws Exception {  
-            resources.resourceId("my_resource");  
-        }  
-        @Override  
-        public void configure(HttpSecurity http) throws Exception {  
-            http.authorizeRequests()  
-                .antMatchers(HttpMethod.GET, "/Wordladder").access("#oauth2.hasScope('read')");   
-        }  
-    } 
+    @EnableGlobalMethodSecurity(prePostEnabled = true)
+    @EnableResourceServer
+    @Configuration
+    public class ResourceServerConfiguration extends ResourceServerConfigurerAdapter {
+    	@Override
+    	public void configure(HttpSecurity http) throws Exception {
+    		http.antMatcher("/Wordladder").authorizeRequests()
+    			.antMatchers(HttpMethod.GET, "/**").access("#oauth2.hasScope('read')")
+    			.antMatchers(HttpMethod.POST, "/**").access("#oauth2.hasScope('write')")
+    			.antMatchers(HttpMethod.PUT, "/**").access("#oauth2.hasScope('write')")
+    			.antMatchers(HttpMethod.DELETE, "/**").access("#oauth2.hasScope('write')");
+    	}
+    }
 }
