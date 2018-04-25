@@ -2,7 +2,6 @@ package com.example.demo;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
-import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestMethod;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -13,7 +12,7 @@ import org.slf4j.LoggerFactory;
 
 @SpringBootApplication
 @RestController
-public class WordladderSpringbootApplication {
+public class WordladderSpringbootApplication{
 	
 	private static Logger logger = LoggerFactory.getLogger(WordladderSpringbootApplication.class);
 	
